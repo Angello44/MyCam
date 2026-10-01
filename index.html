@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyCam</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- NAVBAR -->
+    <nav class="navbar">
+      <div class="logo">
+        <div class="logo-mark">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+            />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </div>
+        <span class="logo-name">MyCam</span>
+      </div>
+      <div class="nav-right">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Menghubungkan…</span>
+      </div>
+    </nav>
+
+    <div class="container">
+      <!-- PAGE HEADER -->
+      <div class="page-header">
+        <h1>Ambil Foto & Simpan ke Cloud</h1>
+        <p>Foto tersimpan langsung ke Firestore secara real-time</p>
+      </div>
+
+      <!-- MAIN GRID -->
+      <div class="main-grid">
+        <!-- Camera Panel -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-label">Live Camera</span>
+          </div>
+          <div class="panel-body">
+            <div class="camera-view">
+              <video id="video" autoplay playsinline muted></video>
+              <!-- Canvas overlay untuk bounding box COCO-SSD -->
+              <canvas id="detect-canvas"></canvas>
+              <div class="flash" id="flash"></div>
+              <div class="cam-idle" id="cam-idle">
+                <div class="cam-idle-icon">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+                    />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </div>
+                <p>Kamera belum aktif</p>
+              </div>
+            </div>
+            <!-- Status loading model AI -->
+            <div class="ai-status" id="ai-status">
+              <span class="ai-dot" id="ai-dot"></span>
+              <span id="ai-text">Model AI belum dimuat</span>
+            </div>
+
+            <div class="btn-group">
+              <button class="btn btn-dark" id="btn-start">
+                <svg viewBox="0 0 24 24">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Nyalakan Kamera
+              </button>
+              <button class="btn btn-ghost" id="btn-snap" disabled>
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+                  />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                Ambil Foto & Simpan
+              </button>
+              <button class="btn btn-outline-red" id="btn-stop" disabled>
+                <svg viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                </svg>
+                Matikan Kamera
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview Panel -->
+        <div class="panel panel-right">
+          <div class="panel-header">
+            <span class="panel-label">Preview</span>
+          </div>
+          <div class="panel-body">
+            <div class="preview-view">
+              <img id="preview-img" alt="Preview foto terakhir" />
+              <div class="preview-idle" id="preview-idle">
+                <svg viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <p>Belum ada foto diambil</p>
+              </div>
+            </div>
+
+            <div class="btn-group">
+              <button class="btn btn-ghost" id="btn-download" disabled>
+                <svg viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download Foto
+              </button>
+            </div>
+
+            <!-- Hasil deteksi objek -->
+            <div class="detect-result" id="detect-result">
+              <div class="detect-title">Objek Terdeteksi</div>
+              <div class="detect-list" id="detect-list">
+                <span class="detect-empty"
+                  >Ambil foto untuk melihat hasil deteksi.</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- GALLERY -->
+      <div class="gallery-section">
+        <div class="section-header">
+          <span class="section-title">Riwayat Foto</span>
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span class="count-chip" id="photo-count">0 foto</span>
+            <button
+              class="btn-clear-all"
+              id="btn-clear-all"
+              style="display: none"
+            >
+              Hapus Semua
+            </button>
+          </div>
+        </div>
+        <div class="gallery-grid" id="gallery">
+          <div class="gallery-empty">
+            Foto yang diambil akan muncul di sini.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden canvas -->
+    <canvas id="canvas" width="640" height="480"></canvas>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
