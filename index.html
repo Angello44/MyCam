@@ -2,12 +2,17 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>MyCam</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- NAVBAR -->
+    <!-- ═══════════════════════════════════════════
+     NAVBAR (desktop only)
+════════════════════════════════════════════ -->
     <nav class="navbar">
       <div class="logo">
         <div class="logo-mark">
@@ -26,24 +31,28 @@
       </div>
     </nav>
 
-    <div class="container">
-      <!-- PAGE HEADER -->
+    <!-- ═══════════════════════════════════════════
+     DESKTOP LAYOUT
+════════════════════════════════════════════ -->
+    <div class="container desktop-only">
       <div class="page-header">
         <h1>Ambil Foto & Simpan ke Cloud</h1>
         <p>Foto tersimpan langsung ke Firestore secara real-time</p>
       </div>
 
-      <!-- MAIN GRID -->
       <div class="main-grid">
         <!-- Camera Panel -->
         <div class="panel">
           <div class="panel-header">
             <span class="panel-label">Live Camera</span>
+            <div class="ai-status" id="ai-status">
+              <span class="ai-dot" id="ai-dot"></span>
+              <span id="ai-text">Model AI belum dimuat</span>
+            </div>
           </div>
           <div class="panel-body">
             <div class="camera-view">
               <video id="video" autoplay playsinline muted></video>
-              <!-- Canvas overlay untuk bounding box COCO-SSD -->
               <canvas id="detect-canvas"></canvas>
               <div class="flash" id="flash"></div>
               <div class="cam-idle" id="cam-idle">
@@ -57,11 +66,6 @@
                 </div>
                 <p>Kamera belum aktif</p>
               </div>
-            </div>
-            <!-- Status loading model AI -->
-            <div class="ai-status" id="ai-status">
-              <span class="ai-dot" id="ai-dot"></span>
-              <span id="ai-text">Model AI belum dimuat</span>
             </div>
 
             <div class="btn-group">
@@ -119,8 +123,7 @@
               </button>
             </div>
 
-            <!-- Hasil deteksi objek -->
-            <div class="detect-result" id="detect-result">
+            <div class="detect-result">
               <div class="detect-title">Objek Terdeteksi</div>
               <div class="detect-list" id="detect-list">
                 <span class="detect-empty"
@@ -132,7 +135,7 @@
         </div>
       </div>
 
-      <!-- GALLERY -->
+      <!-- Gallery -->
       <div class="gallery-section">
         <div class="section-header">
           <span class="section-title">Riwayat Foto</span>
@@ -155,10 +158,186 @@
       </div>
     </div>
 
+    <!-- ═══════════════════════════════════════════
+     MOBILE LAYOUT
+════════════════════════════════════════════ -->
+    <div class="mobile-only">
+      <!-- Mobile status bar -->
+      <div class="m-statusbar">
+        <span class="m-logo">MyCam</span>
+        <div class="m-nav-status">
+          <div class="status-dot" id="m-status-dot"></div>
+          <span id="m-status-text">Menghubungkan…</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="m-tabs">
+        <button class="m-tab active" data-tab="camera">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+            />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+          Kamera
+        </button>
+        <button class="m-tab" data-tab="gallery">
+          <svg viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          Riwayat <span class="tab-badge" id="m-photo-count">0</span>
+        </button>
+      </div>
+
+      <!-- Screen: Camera -->
+      <div class="m-screen" id="m-screen-camera">
+        <div class="m-viewfinder" id="m-viewfinder">
+          <video id="m-video" autoplay playsinline muted></video>
+          <canvas id="m-detect-canvas"></canvas>
+          <div class="flash" id="m-flash"></div>
+          <!-- Zoom indicator -->
+          <div class="zoom-indicator" id="zoom-indicator">1.0×</div>
+          <div class="cam-idle" id="m-cam-idle">
+            <div class="cam-idle-icon dark">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+                />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </div>
+            <p>Ketuk ▶ untuk memulai</p>
+          </div>
+
+          <!-- AI badge -->
+          <div class="m-ai-badge">
+            <span class="ai-dot" id="m-ai-dot"></span>
+            <span id="m-ai-text">Memuat AI…</span>
+          </div>
+
+          <!-- Top controls (flash + switch) -->
+          <div class="m-top-controls">
+            <button
+              class="m-icon-btn"
+              id="btn-flash"
+              title="Toggle Flash"
+              disabled
+            >
+              <!-- flash off icon -->
+              <svg id="flash-icon-off" viewBox="0 0 24 24">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                <line x1="2" y1="2" x2="22" y2="22" stroke-linecap="round" />
+              </svg>
+              <!-- flash on icon (hidden by default) -->
+              <svg id="flash-icon-on" viewBox="0 0 24 24" style="display: none">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </button>
+            <button
+              class="m-icon-btn"
+              id="btn-switch"
+              title="Switch Kamera"
+              disabled
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M1 4v6h6" />
+                <path d="M23 20v-6h-6" />
+                <path
+                  d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom controls -->
+        <div class="m-controls">
+          <button
+            class="m-ctrl-btn m-ctrl-sm"
+            id="m-btn-stop"
+            disabled
+            title="Stop"
+          >
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+            </svg>
+          </button>
+          <button class="m-ctrl-btn m-ctrl-snap" id="m-btn-snap" disabled>
+            <span class="snap-ring"></span>
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+              />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </button>
+          <button class="m-ctrl-btn m-ctrl-sm" id="m-btn-start" title="Start">
+            <svg viewBox="0 0 24 24">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Screen: Gallery -->
+      <div class="m-screen m-hidden" id="m-screen-gallery">
+        <!-- Preview strip -->
+        <div class="m-preview-strip">
+          <div class="preview-view">
+            <img id="m-preview-img" alt="Preview" />
+            <div class="preview-idle" id="m-preview-idle">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <p>Belum ada foto</p>
+            </div>
+          </div>
+          <div class="detect-result" style="margin-top: 10px">
+            <div class="detect-title">Terdeteksi</div>
+            <div class="detect-list" id="m-detect-list">
+              <span class="detect-empty">Ambil foto untuk melihat hasil.</span>
+            </div>
+          </div>
+          <button
+            class="btn btn-ghost"
+            id="m-btn-download"
+            disabled
+            style="width: 100%; margin-top: 10px"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download Foto
+          </button>
+        </div>
+
+        <!-- Gallery -->
+        <div class="m-gallery-header">
+          <span class="section-title">Riwayat</span>
+          <button
+            class="btn-clear-all"
+            id="m-btn-clear-all"
+            style="display: none"
+          >
+            Hapus Semua
+          </button>
+        </div>
+        <div class="m-gallery-grid" id="m-gallery">
+          <div class="gallery-empty">Foto akan muncul di sini.</div>
+        </div>
+      </div>
+    </div>
+    <!-- /mobile-only -->
+
     <!-- Hidden canvas -->
     <canvas id="canvas" width="640" height="480"></canvas>
-
-    <!-- Toast -->
     <div id="toast"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>

@@ -6,7 +6,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 // TensorFlow.js & COCO-SSD di-load via <script> tag di index.html (global: tf, cocoSsd)
 
-// ── Firebase Config ──────────────────────────────────────────────────────────
+// ── Firebase Config ───────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyDtr7Si-2OnMFCgKqriJ-X7YJAOBv4LNAM",
   authDomain: "cameramobile-34a8c.firebaseapp.com",
@@ -19,11 +19,94 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ── Elements ─────────────────────────────────────────────────────────────────
+// ── COCO-SSD Class Color Map ──────────────────────────────────────────────────
+const CLASS_COLORS = {
+  // People & animals
+  person: "#ef4444",
+  bear: "#92400e",
+  cat: "#f97316",
+  dog: "#f59e0b",
+  horse: "#84cc16",
+  sheep: "#22c55e",
+  cow: "#10b981",
+  elephant: "#14b8a6",
+  bird: "#06b6d4",
+  zebra: "#0ea5e9",
+  giraffe: "#3b82f6",
+  // Vehicles
+  car: "#6366f1",
+  truck: "#8b5cf6",
+  bus: "#a855f7",
+  motorcycle: "#ec4899",
+  bicycle: "#f43f5e",
+  airplane: "#0891b2",
+  boat: "#0369a1",
+  train: "#1d4ed8",
+  // Electronics
+  "cell phone": "#7c3aed",
+  laptop: "#4f46e5",
+  tv: "#1e40af",
+  keyboard: "#0f766e",
+  mouse: "#047857",
+  remote: "#065f46",
+  // Kitchen & food
+  bottle: "#c2410c",
+  cup: "#b45309",
+  fork: "#92400e",
+  knife: "#78350f",
+  spoon: "#713f12",
+  bowl: "#4d7c0f",
+  banana: "#fbbf24",
+  apple: "#ef4444",
+  sandwich: "#f97316",
+  orange: "#fb923c",
+  broccoli: "#86efac",
+  carrot: "#fdba74",
+  "hot dog": "#fca5a1",
+  pizza: "#fcd34d",
+  donut: "#fbcfe8",
+  cake: "#f0abfc",
+  // Furniture & household
+  chair: "#a3e635",
+  couch: "#34d399",
+  bed: "#67e8f9",
+  "dining table": "#93c5fd",
+  toilet: "#c084fc",
+  "wine glass": "#e879f9",
+  scissors: "#f9a8d4",
+  "potted plant": "#6ee7b7",
+  // Outdoor & misc
+  umbrella: "#fde68a",
+  handbag: "#fecaca",
+  tie: "#bfdbfe",
+  suitcase: "#ddd6fe",
+  backpack: "#fdf4ff",
+  clock: "#fffbeb",
+  "traffic light": "#fef08a",
+  "fire hydrant": "#fff7ed",
+  "stop sign": "#fef2f2",
+  bench: "#f0fdfa",
+  book: "#fafafa",
+  vase: "#f0f9ff",
+  "sports ball": "#bbf7d0",
+  kite: "#fef9c3",
+  skateboard: "#e2e8f0",
+  surfboard: "#f1f5f9",
+  "tennis racket": "#ecfdf5",
+  frisbee: "#84cc16",
+};
+
+function getClassColor(cls) {
+  return CLASS_COLORS[cls] || "#facc15";
+}
+
+// ── Detect mobile breakpoint ──────────────────────────────────────────────────
+const isMobile = () => window.innerWidth <= 767;
+
+// ── Desktop Elements ──────────────────────────────────────────────────────────
 const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
 const detectCanvas = document.getElementById("detect-canvas");
-const flash = document.getElementById("flash");
+const flashEl = document.getElementById("flash");
 const previewImg = document.getElementById("preview-img");
 const previewIdle = document.getElementById("preview-idle");
 const camIdle = document.getElementById("cam-idle");
@@ -38,6 +121,30 @@ const statusText = document.getElementById("status-text");
 const aiDot = document.getElementById("ai-dot");
 const aiText = document.getElementById("ai-text");
 const detectList = document.getElementById("detect-list");
+
+// ── Mobile Elements ───────────────────────────────────────────────────────────
+const mVideo = document.getElementById("m-video");
+const mDetectCanvas = document.getElementById("m-detect-canvas");
+const mFlashEl = document.getElementById("m-flash");
+const mPreviewImg = document.getElementById("m-preview-img");
+const mPreviewIdle = document.getElementById("m-preview-idle");
+const mCamIdle = document.getElementById("m-cam-idle");
+const mBtnStart = document.getElementById("m-btn-start");
+const mBtnSnap = document.getElementById("m-btn-snap");
+const mBtnStop = document.getElementById("m-btn-stop");
+const mBtnDownload = document.getElementById("m-btn-download");
+const mGallery = document.getElementById("m-gallery");
+const mPhotoCount = document.getElementById("m-photo-count");
+const mStatusDot = document.getElementById("m-status-dot");
+const mStatusText = document.getElementById("m-status-text");
+const mAiDot = document.getElementById("m-ai-dot");
+const mAiText = document.getElementById("m-ai-text");
+const mDetectList = document.getElementById("m-detect-list");
+const btnFlash = document.getElementById("btn-flash");
+const btnSwitch = document.getElementById("btn-switch");
+
+// ── Shared canvas ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById("canvas");
 const toast = document.getElementById("toast");
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -47,16 +154,90 @@ let toastTimer = null;
 let cocoModel = null;
 let detectLoop = null;
 let lastPredicts = [];
+let facingMode = "user";
+let flashOn = false;
+let torchTrack = null;
 
-// ── LocalStorage helpers ──────────────────────────────────────────────────────
+// ── Zoom state ────────────────────────────────────────────────────────────────
+let currentZoom = 1;
+let minZoom = 1;
+let maxZoom = 4;
+let zoomTimer = null;
+
+const zoomIndicator = document.getElementById("zoom-indicator");
+
+function showZoomIndicator(val) {
+  if (!zoomIndicator) return;
+  zoomIndicator.textContent = val.toFixed(1) + "×";
+  zoomIndicator.classList.add("visible");
+  clearTimeout(zoomTimer);
+  zoomTimer = setTimeout(() => zoomIndicator.classList.remove("visible"), 1500);
+}
+
+async function applyZoom(val) {
+  if (!torchTrack) return;
+  try {
+    const caps = torchTrack.getCapabilities();
+    if (!caps.zoom) return;
+    minZoom = caps.zoom.min ?? 1;
+    maxZoom = caps.zoom.max ?? 4;
+    currentZoom = Math.min(maxZoom, Math.max(minZoom, val));
+    await torchTrack.applyConstraints({ advanced: [{ zoom: currentZoom }] });
+    showZoomIndicator(currentZoom);
+  } catch {
+    /* zoom tidak didukung */
+  }
+}
+
+// ── Pinch to zoom ─────────────────────────────────────────────────────────────
+let pinchStartDist = null;
+let pinchStartZoom = 1;
+
+function getPinchDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+const viewfinder = document.getElementById("m-viewfinder");
+if (viewfinder) {
+  viewfinder.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 2) {
+        pinchStartDist = getPinchDist(e.touches);
+        pinchStartZoom = currentZoom;
+        e.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+
+  viewfinder.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches.length === 2 && pinchStartDist) {
+        const dist = getPinchDist(e.touches);
+        const scale = dist / pinchStartDist;
+        applyZoom(pinchStartZoom * scale);
+        e.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+
+  viewfinder.addEventListener("touchend", () => {
+    pinchStartDist = null;
+  });
+}
+
+// ── LocalStorage ──────────────────────────────────────────────────────────────
 const STORAGE_KEY = "camcloud_gallery";
 
 function saveToStorage(entry) {
-  const existing = getFromStorage();
-  existing.unshift(entry); // terbaru di depan
-  // Batasi 30 foto agar localStorage tidak penuh
-  const trimmed = existing.slice(0, 30);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  const list = getFromStorage();
+  list.unshift(entry);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 30)));
 }
 
 function getFromStorage() {
@@ -71,9 +252,24 @@ function clearStorage() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// ── Firebase status ───────────────────────────────────────────────────────────
-statusDot.classList.add("live");
-statusText.textContent = "Firebase terhubung";
+// ── Firebase & AI status ──────────────────────────────────────────────────────
+function setStatus(connected) {
+  const cls = connected ? "live" : "";
+  const label = connected ? "Firebase terhubung" : "Gagal terhubung";
+  if (statusDot) statusDot.className = "status-dot " + cls;
+  if (statusText) statusText.textContent = label;
+  if (mStatusDot) mStatusDot.className = "status-dot " + cls;
+  if (mStatusText) mStatusText.textContent = label;
+}
+
+function setAI(dotClass, label) {
+  if (aiDot) aiDot.className = "ai-dot " + dotClass;
+  if (aiText) aiText.textContent = label;
+  if (mAiDot) mAiDot.className = "ai-dot " + dotClass;
+  if (mAiText) mAiText.textContent = label;
+}
+
+setStatus(true);
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function showToast(msg) {
@@ -83,71 +279,83 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
-// ── Load COCO-SSD Model ───────────────────────────────────────────────────────
+// ── Active video & canvas (tergantung mode) ───────────────────────────────────
+function activeVideo() {
+  return isMobile() ? mVideo : video;
+}
+function activeCanvas() {
+  return isMobile() ? mDetectCanvas : detectCanvas;
+}
+function activeFlash() {
+  return isMobile() ? mFlashEl : flashEl;
+}
+
+// ── Load COCO-SSD ─────────────────────────────────────────────────────────────
 async function loadModel() {
-  aiDot.className = "ai-dot loading";
-  aiText.textContent = "Memuat model COCO-SSD…";
+  setAI("loading", "Memuat COCO-SSD…");
   try {
     cocoModel = await cocoSsd.load();
-    aiDot.className = "ai-dot ready";
-    aiText.textContent = "Model siap — deteksi aktif";
+    setAI("ready", "Model siap");
     showToast("Model COCO-SSD siap");
   } catch (e) {
-    aiDot.className = "ai-dot";
-    aiText.textContent = "Gagal memuat model AI";
+    setAI("", "AI gagal dimuat");
     console.error("COCO-SSD load error:", e);
   }
 }
 
-// ── Detection Loop ────────────────────────────────────────────────────────────
+// ── Detection loop ────────────────────────────────────────────────────────────
 function startDetection() {
   if (!cocoModel || !stream) return;
+  const vid = activeVideo();
+  const cvs = activeCanvas();
+  const ctx = cvs.getContext("2d");
 
-  const rect = video.getBoundingClientRect();
-  detectCanvas.width = rect.width;
-  detectCanvas.height = rect.height;
-
-  const ctx = detectCanvas.getContext("2d");
+  const rect = vid.getBoundingClientRect();
+  cvs.width = rect.width;
+  cvs.height = rect.height;
 
   async function detect() {
     if (!stream) return;
-    aiDot.className = "ai-dot detecting";
+    setAI("detecting", "Mendeteksi…");
 
-    const predictions = await cocoModel.detect(video);
+    const predictions = await cocoModel.detect(vid);
     lastPredicts = predictions;
 
-    ctx.clearRect(0, 0, detectCanvas.width, detectCanvas.height);
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-    const scaleX = detectCanvas.width / video.videoWidth;
-    const scaleY = detectCanvas.height / video.videoHeight;
+    const scaleX = cvs.width / vid.videoWidth;
+    const scaleY = cvs.height / vid.videoHeight;
+
+    // Flip X hanya jika kamera depan (mirror)
+    const shouldFlip = facingMode === "user";
 
     predictions.forEach((pred) => {
       const [x, y, w, h] = pred.bbox;
-
-      // Flip koordinat X karena video di-mirror (scaleX(-1))
-      const flippedX = video.videoWidth - x - w;
-
-      const sx = flippedX * scaleX;
+      const rawX = shouldFlip ? vid.videoWidth - x - w : x;
+      const sx = rawX * scaleX;
       const sy = y * scaleY;
       const sw = w * scaleX;
       const sh = h * scaleY;
       const conf = Math.round(pred.score * 100);
+      const color = getClassColor(pred.class);
 
-      ctx.strokeStyle = "#2d2926";
-      ctx.lineWidth = 1.5;
+      // Bounding box berwarna per class
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
       ctx.strokeRect(sx, sy, sw, sh);
 
+      // Label background pakai warna yang sama (semi transparan)
       const label = `${pred.class} ${conf}%`;
       const padding = 4;
       ctx.font = "600 11px Inter, sans-serif";
       const textW = ctx.measureText(label).width;
-      ctx.fillStyle = "#2d2926";
+      ctx.fillStyle = color + "cc"; // hex + alpha cc = ~80%
       ctx.fillRect(sx - 0.75, sy - 20, textW + padding * 2, 20);
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = "#fff";
       ctx.fillText(label, sx + padding, sy - 6);
     });
 
-    aiDot.className = "ai-dot ready";
+    setAI("ready", "Model siap");
     detectLoop = requestAnimationFrame(detect);
   }
 
@@ -157,55 +365,135 @@ function startDetection() {
 function stopDetection() {
   if (detectLoop) cancelAnimationFrame(detectLoop);
   detectLoop = null;
-  detectCanvas
+  activeCanvas()
     .getContext("2d")
-    .clearRect(0, 0, detectCanvas.width, detectCanvas.height);
+    .clearRect(0, 0, activeCanvas().width, activeCanvas().height);
   lastPredicts = [];
 }
 
-// ── Camera: Start ─────────────────────────────────────────────────────────────
-btnStart.addEventListener("click", async () => {
+// ── Start Camera (shared) ─────────────────────────────────────────────────────
+async function startCamera() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-    video.addEventListener("loadeddata", () => startDetection(), {
-      once: true,
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode },
     });
-    camIdle.style.display = "none";
-    btnStart.disabled = true;
-    btnSnap.disabled = false;
-    btnStop.disabled = false;
+
+    const vid = activeVideo();
+    vid.srcObject = stream;
+
+    // Simpan torch track kalau ada (untuk flash HP)
+    torchTrack = stream.getVideoTracks()[0] || null;
+
+    vid.addEventListener("loadeddata", () => startDetection(), { once: true });
+
+    // Update UI
+    const idle = isMobile() ? mCamIdle : camIdle;
+    idle.style.display = "none";
+
+    if (isMobile()) {
+      mBtnStart.disabled = true;
+      mBtnSnap.disabled = false;
+      mBtnStop.disabled = false;
+      btnFlash.disabled = false;
+      btnSwitch.disabled = false;
+    } else {
+      btnStart.disabled = true;
+      btnSnap.disabled = false;
+      btnStop.disabled = false;
+    }
+
+    // Mirror video hanya untuk kamera depan
+    vid.style.transform = facingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+
     showToast("Kamera aktif");
   } catch {
-    showToast("Gagal mengakses kamera — izinkan di browser");
+    showToast("Gagal akses kamera — izinkan di browser");
+  }
+}
+
+// ── Stop Camera (shared) ──────────────────────────────────────────────────────
+function stopCamera() {
+  stopDetection();
+  stream?.getTracks().forEach((t) => t.stop());
+  stream = null;
+  torchTrack = null;
+  flashOn = false;
+
+  const vid = activeVideo();
+  const idle = isMobile() ? mCamIdle : camIdle;
+  vid.srcObject = null;
+  idle.style.display = "flex";
+
+  if (isMobile()) {
+    mBtnStart.disabled = false;
+    mBtnSnap.disabled = true;
+    mBtnStop.disabled = true;
+    btnFlash.disabled = true;
+    btnSwitch.disabled = true;
+    btnFlash.classList.remove("flash-on");
+    document.getElementById("flash-icon-off").style.display = "";
+    document.getElementById("flash-icon-on").style.display = "none";
+  } else {
+    btnStart.disabled = false;
+    btnSnap.disabled = true;
+    btnStop.disabled = true;
+  }
+
+  setAI("ready", "Model siap");
+  showToast("Kamera dimatikan");
+}
+
+// ── Desktop listeners ─────────────────────────────────────────────────────────
+btnStart.addEventListener("click", () => startCamera());
+btnStop.addEventListener("click", () => stopCamera());
+
+// ── Mobile listeners ──────────────────────────────────────────────────────────
+mBtnStart.addEventListener("click", () => startCamera());
+mBtnStop.addEventListener("click", () => stopCamera());
+
+// Switch kamera (depan ↔ belakang)
+btnSwitch.addEventListener("click", async () => {
+  facingMode = facingMode === "user" ? "environment" : "user";
+  showToast(facingMode === "user" ? "Kamera depan" : "Kamera belakang");
+  await startCamera();
+});
+
+// Flash / torch toggle
+btnFlash.addEventListener("click", async () => {
+  if (!torchTrack) return;
+  flashOn = !flashOn;
+  try {
+    await torchTrack.applyConstraints({ advanced: [{ torch: flashOn }] });
+    btnFlash.classList.toggle("flash-on", flashOn);
+    document.getElementById("flash-icon-off").style.display = flashOn
+      ? "none"
+      : "";
+    document.getElementById("flash-icon-on").style.display = flashOn
+      ? ""
+      : "none";
+    showToast(flashOn ? "Flash nyala" : "Flash mati");
+  } catch {
+    showToast("Flash tidak didukung di browser ini");
+    flashOn = false;
   }
 });
 
-// ── Camera: Stop ──────────────────────────────────────────────────────────────
-btnStop.addEventListener("click", () => {
-  stopDetection();
-  stream?.getTracks().forEach((t) => t.stop());
-  video.srcObject = null;
-  stream = null;
-  camIdle.style.display = "flex";
-  aiDot.className = "ai-dot ready";
-  aiText.textContent = "Model siap — kamera mati";
-  btnStart.disabled = false;
-  btnSnap.disabled = true;
-  btnStop.disabled = true;
-  showToast("Kamera dimatikan");
-});
+// ── Snap & Save (shared) ──────────────────────────────────────────────────────
+async function doSnap(snapBtn) {
+  const vid = activeVideo();
+  const flashAnim = activeFlash();
 
-// ── Snap & Save ───────────────────────────────────────────────────────────────
-btnSnap.addEventListener("click", async () => {
-  flash.classList.add("pop");
-  setTimeout(() => flash.classList.remove("pop"), 120);
+  flashAnim.classList.add("pop");
+  setTimeout(() => flashAnim.classList.remove("pop"), 120);
 
-  // Jalankan deteksi fresh saat snap — jangan andalkan lastPredicts yang bisa stale
+  // Fresh detection
   let snapshot = [];
   if (cocoModel && stream) {
     try {
-      const fresh = await cocoModel.detect(video);
+      const fresh = await cocoModel.detect(vid);
       snapshot = fresh.map((p) => ({
         class: p.class,
         confidence: parseFloat(p.score.toFixed(3)),
@@ -216,8 +504,7 @@ btnSnap.addEventListener("click", async () => {
           height: Math.round(p.bbox[3]),
         },
       }));
-    } catch (e) {
-      console.warn("Deteksi saat snap gagal, pakai lastPredicts:", e);
+    } catch {
       snapshot = lastPredicts.map((p) => ({
         class: p.class,
         confidence: parseFloat(p.score.toFixed(3)),
@@ -231,26 +518,31 @@ btnSnap.addEventListener("click", async () => {
     }
   }
 
-  // Capture — flip horizontal agar tidak mirror
+  // Capture — flip hanya kamera depan
   const ctx = canvas.getContext("2d");
   ctx.save();
-  ctx.translate(640, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, 0, 0, 640, 480);
+  if (facingMode === "user") {
+    ctx.translate(640, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(vid, 0, 0, 640, 480);
   ctx.restore();
   const dataUrl = canvas.toDataURL("image/png");
   lastDataUrl = dataUrl;
 
-  // Preview
+  // Update preview (desktop + mobile)
   previewImg.src = dataUrl;
   previewImg.style.display = "block";
   previewIdle.style.display = "none";
   btnDownload.disabled = false;
+  mPreviewImg.src = dataUrl;
+  mPreviewImg.style.display = "block";
+  mPreviewIdle.style.display = "none";
+  mBtnDownload.disabled = false;
 
-  // Detection tags di panel preview
   renderDetectTags(snapshot);
 
-  // Simpan ke localStorage & render ke gallery
+  // Gallery entry
   const entry = {
     dataUrl,
     time: new Date().toLocaleTimeString("id-ID", {
@@ -267,57 +559,64 @@ btnSnap.addEventListener("click", async () => {
   saveToStorage(entry);
   renderGalleryItem(entry, true);
 
-  // Simpan ke Firestore
-  btnSnap.disabled = true;
-  btnSnap.textContent = "Menyimpan…";
+  // Mobile: auto pindah ke tab gallery
+  if (isMobile()) {
+    document.querySelector('.m-tab[data-tab="gallery"]').click();
+  }
 
+  // Firestore
+  if (snapBtn) snapBtn.disabled = true;
   try {
     const docRef = await addDoc(collection(db, "photos"), {
       timestamp: new Date(),
       namaFile: "foto_" + Date.now() + ".png",
       status: "captured",
-      detectedObjects: snapshot, // array lengkap: class, confidence, bbox
+      detectedObjects: snapshot,
       objectCount: snapshot.length,
     });
     showToast("Tersimpan — " + docRef.id.slice(0, 8) + "…");
     console.log("✅ Firestore saved:", snapshot);
   } catch (e) {
-    showToast("Gagal menyimpan: " + e.message);
+    showToast("Gagal simpan: " + e.message);
     console.error("❌ Firestore error:", e);
   } finally {
-    btnSnap.disabled = false;
-    btnSnap.innerHTML = `
-      <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      Ambil Foto & Simpan`;
+    if (snapBtn) snapBtn.disabled = false;
   }
-});
+}
 
-// ── Render Detection Tags ─────────────────────────────────────────────────────
+btnSnap.addEventListener("click", () => doSnap(btnSnap));
+mBtnSnap.addEventListener("click", () => doSnap(mBtnSnap));
+
+// ── Detection tags ────────────────────────────────────────────────────────────
 function renderDetectTags(predictions) {
-  if (!predictions.length) {
-    detectList.innerHTML =
-      '<span class="detect-empty">Tidak ada objek terdeteksi.</span>';
-    return;
-  }
-  detectList.innerHTML = predictions
-    .map((p) => {
-      const conf = Math.round(p.score * 100);
-      return `<span class="detect-tag">${p.class} <span class="conf">${conf}%</span></span>`;
-    })
-    .join("");
+  const html = predictions.length
+    ? predictions
+        .map((p) => {
+          const conf = Math.round(p.confidence * 100);
+          const color = getClassColor(p.class);
+          return `<span class="detect-tag" style="border-color:${color};background:${color}22;">
+                    <span class="detect-dot" style="background:${color}"></span>
+                    ${p.class} <span class="conf">${conf}%</span>
+                  </span>`;
+        })
+        .join("")
+    : '<span class="detect-empty">Tidak ada objek terdeteksi.</span>';
+  detectList.innerHTML = html;
+  mDetectList.innerHTML = html;
 }
 
 // ── Download ──────────────────────────────────────────────────────────────────
-btnDownload.addEventListener("click", () => {
+function doDownload() {
   if (!lastDataUrl) return;
   const a = document.createElement("a");
   a.href = lastDataUrl;
-  a.download = "camcloud_" + Date.now() + ".png";
+  a.download = "mycam_" + Date.now() + ".png";
   a.click();
   showToast("Foto diunduh");
-});
+}
+btnDownload.addEventListener("click", doDownload);
+mBtnDownload.addEventListener("click", doDownload);
 
-// ── Gallery ───────────────────────────────────────────────────────────────────
 // ── Gallery ───────────────────────────────────────────────────────────────────
 function deleteFromStorage(index) {
   const entries = getFromStorage();
@@ -328,74 +627,119 @@ function deleteFromStorage(index) {
 function refreshPhotoCount() {
   const n = getFromStorage().length;
   photoCount.textContent = n + " foto";
+  mPhotoCount.textContent = n;
+  const none =
+    '<div class="gallery-empty">Foto yang diambil akan muncul di sini.</div>';
   if (n === 0) {
-    gallery.innerHTML =
-      '<div class="gallery-empty">Foto yang diambil akan muncul di sini.</div>';
+    gallery.innerHTML = none;
+    mGallery.innerHTML = none;
     document.getElementById("btn-clear-all").style.display = "none";
+    document.getElementById("m-btn-clear-all").style.display = "none";
   }
 }
 
 function renderGalleryItem(entry, prepend = false, storageIndex = null) {
-  document.querySelector(".gallery-empty")?.remove();
+  document.querySelector("#gallery .gallery-empty")?.remove();
+  document.querySelector("#m-gallery .gallery-empty")?.remove();
   document.getElementById("btn-clear-all").style.display = "inline-flex";
+  document.getElementById("m-btn-clear-all").style.display = "inline-flex";
 
-  const label = entry.labels?.length
-    ? entry.labels.join(", ")
-    : "Tidak terdeteksi";
+  const label = entry.labels?.length ? entry.labels.join(", ") : "";
 
-  const item = document.createElement("div");
-  item.className = "gallery-item";
-  item.dataset.index = storageIndex ?? 0;
-  item.innerHTML = `
-    <img src="${entry.dataUrl}" alt="foto">
-    <div class="item-time">${entry.time} · ${label}</div>
-    <button class="btn-delete-item" title="Hapus foto" aria-label="Hapus foto">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
-      </svg>
-    </button>
-  `;
+  // Factory buat item DOM
+  function makeItem(galleryEl) {
+    const item = document.createElement("div");
+    item.className = "gallery-item";
+    item.dataset.index = storageIndex ?? 0;
+    item.innerHTML = `
+            <img src="${entry.dataUrl}" alt="foto">
+            <div class="item-time">${entry.time}${label ? " · " + label : ""}</div>
+            <button class="btn-delete-item" title="Hapus" aria-label="Hapus foto">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+                </svg>
+            </button>`;
 
-  item.querySelector(".btn-delete-item").addEventListener("click", (e) => {
-    e.stopPropagation();
-    const idx = parseInt(item.dataset.index);
-    deleteFromStorage(idx);
-    item.remove();
-    gallery.querySelectorAll(".gallery-item").forEach((el, i) => {
-      el.dataset.index = i;
+    item.querySelector(".btn-delete-item").addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteFromStorage(parseInt(item.dataset.index));
+
+      // Hapus item yang sama di kedua gallery
+      document
+        .querySelectorAll(`.gallery-item[data-index="${item.dataset.index}"]`)
+        .forEach((el) => el.remove());
+      document.querySelectorAll(".gallery-item").forEach((el, i) => {
+        el.dataset.index = i;
+      });
+      refreshPhotoCount();
+      showToast("Foto dihapus");
     });
-    refreshPhotoCount();
-    showToast("Foto dihapus");
-  });
 
-  if (prepend) {
-    gallery.querySelectorAll(".gallery-item").forEach((el) => {
-      el.dataset.index = parseInt(el.dataset.index) + 1;
-    });
-    item.dataset.index = 0;
-    gallery.insertBefore(item, gallery.firstChild);
-  } else {
-    gallery.appendChild(item);
+    if (prepend) {
+      galleryEl.querySelectorAll(".gallery-item").forEach((el) => {
+        el.dataset.index = parseInt(el.dataset.index) + 1;
+      });
+      item.dataset.index = 0;
+      galleryEl.insertBefore(item, galleryEl.firstChild);
+    } else {
+      galleryEl.appendChild(item);
+    }
   }
+
+  makeItem(gallery);
+  makeItem(mGallery);
+
+  // Update count
+  const n = getFromStorage().length;
+  photoCount.textContent = n + " foto";
+  mPhotoCount.textContent = n;
 }
 
 function loadGalleryFromStorage() {
   const entries = getFromStorage();
   if (!entries.length) return;
-
-  document.querySelector(".gallery-empty")?.remove();
+  document.querySelector("#gallery .gallery-empty")?.remove();
+  document.querySelector("#m-gallery .gallery-empty")?.remove();
   entries.forEach((entry, i) => renderGalleryItem(entry, false, i));
   photoCount.textContent = entries.length + " foto";
+  mPhotoCount.textContent = entries.length;
   document.getElementById("btn-clear-all").style.display = "inline-flex";
+  document.getElementById("m-btn-clear-all").style.display = "inline-flex";
 }
 
-document.getElementById("btn-clear-all").addEventListener("click", () => {
+function clearAll() {
   clearStorage();
-  gallery.innerHTML =
+  const none =
     '<div class="gallery-empty">Foto yang diambil akan muncul di sini.</div>';
+  gallery.innerHTML = none;
+  mGallery.innerHTML = none;
   photoCount.textContent = "0 foto";
+  mPhotoCount.textContent = "0";
   document.getElementById("btn-clear-all").style.display = "none";
+  document.getElementById("m-btn-clear-all").style.display = "none";
   showToast("Semua foto dihapus");
+}
+
+document.getElementById("btn-clear-all").addEventListener("click", clearAll);
+document.getElementById("m-btn-clear-all").addEventListener("click", clearAll);
+
+// ── Mobile Tabs ───────────────────────────────────────────────────────────────
+document.querySelectorAll(".m-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document
+      .querySelectorAll(".m-tab")
+      .forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    document
+      .getElementById("m-screen-camera")
+      .classList.toggle("m-hidden", target !== "camera");
+    document
+      .getElementById("m-screen-gallery")
+      .classList.toggle("m-hidden", target !== "gallery");
+  });
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
